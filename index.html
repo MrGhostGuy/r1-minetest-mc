@@ -149,6 +149,20 @@ function buildWorld(){
 }
 buildWorld();
 
+function updateHighlight(){
+  if(typeof meshes === "undefined" || meshes.length===0) return;
+  // nothing destructive for now – keeps the loop happy
+}
+
+function flagOre(){
+  const r = Math.random();
+  if(r<0.6) return 10;
+  if(r<0.8) return 11;
+  if(r<0.94) return 12;
+  return 13;
+}
+
+
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
@@ -317,6 +331,7 @@ function playerUpdate(dt){
   camera.position.z = player.z;
 }
 const clock = new THREE.Clock();
+function updateHighlight(){}
 function animate(){
   requestAnimationFrame(animate);
   if(!gamePaused){
