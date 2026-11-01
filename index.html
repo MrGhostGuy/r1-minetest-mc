@@ -314,7 +314,32 @@ function tryFireClickHandler(){
   }
 }
 // attach tryFire to click event
-canvas.addEventListener('click', function(){ tryFireClickHandler(); });
+canvas.addEventListener('click', function(){
+  raycaster.setFromCamera(new THREEG.Vector2(0,0), camera);
+  const hits = raycaster.intersectObjects(meshes);
+  if(hits.length===0) return;
+  const h = hits[0];
+  const d = h.object.userData;
+  if(!d || !d.id) return;
+  if(!isBuildingMode){
+    if(d.id !== 9){ voxels[idx(d.x,d.y,d.z)] = 0; rebuildBlock(d.x,d.y,d.z); invAdd(d.id,1); toast('+1 '+blockTypes[d.id].name); }
+    else { toast('Cannot break bedrock'); }
+  } else {
+    let normal = h.face ? h.face.normal : new THREEG.Vector3(0,1,0);
+    const nx = d.x + Math.round(normal.x);
+    const ny = d.y + Math.round(normal.y);
+    const nz = d.z + Math.round(normal.z);
+    if (nx>=0 && ny>=0 && nz>=0 && nx<WSIZE && ny<HSIZE && nz<WSIZE){
+      const selId = hotbarIds[selectedSlot];
+      if (selId>0 && voxels[idx(nx,ny,nz)]===0 && inv[selId]>0){
+        voxels[idx(nx,ny,nz)] = selId;
+        inv[selId]--;
+        rebuildBlock(nx,ny,nz);
+        toast('Placed '+blockTypes[selId].name);
+      } else { toast('Cannot place there'); }
+    }
+  }
+});
 
 // feed pointer release to placing? click event is safer
 function updateHighlightSafe(){
@@ -360,9 +385,9 @@ function playerUpdate(dt){
   player.vx = dir.x*speed;
   player.vy += (-9.8)*dt;
   player.vz = dir.z*speed;
-  player.x += player.vx*dt*0.12;
-  player.z += player.vy? player.vz*dt*0.12 : 0;
-  player.y += player.vy*dt*0.12;
+  player.x += player.vx*dt*0.08;
+  player.z += player.vz*dt*0.08;
+  player.y += player.vy*dt*0.08;
   if(player.y < 0.6){
     player.y = 0.6;
     player.vy=0;
