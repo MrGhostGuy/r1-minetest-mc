@@ -1,0 +1,7 @@
+{
+  "title": "R1 Minecraft (Minetest-like)",
+  "url": "https://mrghostguy.github.io/r1-minetest-mc/",
+  "description": "A playable Minecraft‑style voxel world ported to Rabbit R1 using Minetest‑derived WebAssembly and a lightweight Three.js UI. Mine, craft, and survive on the R1 device.",
+  "iconUrl": "https://mrghostguy.github.io/r1-minetest-mc/icon.png",
+  "themeColor": "#2F6B1F"
+}
