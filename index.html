@@ -28,15 +28,9 @@
 <div id="save-load" title="Save / Load">Save</div>
 <div id="modal"></div>
 
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js"
-  }
-}
-</script>
-<script type="module">
-import * as THREE from 'three';
+<script src="https://cdn.jsdelivr.net/npm/three@0.160/build/three.min.js"></script>
+<script>
+const THREE = window.THREE;
 // OrbitControls removed; simple manual camera control via touch events below.
 
 const WSIZE=16, HSIZE=8, BLOCK_SZ=1;
