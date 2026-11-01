@@ -2,215 +2,355 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>R1 Minecraft (Minetest-like)</title>
+<title>R1 Minecraft – Enhanced</title>
 <meta name="viewport" content="width=240,height=282,initial-scale=1.0,user-scalable=no">
 <style>
   html,body {margin:0;padding:0;overflow:hidden;background:#000;font-family:sans-serif;}
   #canvas {display:block;width:240px;height:282px;}
-  #hud {position:absolute;top:0;left:0;width:240px;padding:4px;background:rgba(0,0,0,0.6);color:#fff;font-size:10px;line-height:1.4;z-index:10;}
-  #hotbar {position:absolute;bottom:4px;left:0;width:240px;height:22px;background:rgba(0,0,0,0.7);display:flex;overflow:hidden;}
-  .slot {flex:1;text-align:center;color:#fff;padding:2px;border-right:1px solid #555;}
-  .slot.selected {background:#555;}
-  #msg {position:absolute;top:120px;left:0;width:240px;text-align:center;}
+  #hud {position:absolute;top:0;left:0;width:240px;padding:4px;background:rgba(0,0,0,0.65);color:#fff;font-size:8px;line-height:1.4;z-index:10;}
+  #hotbar {position:absolute;bottom:4px;left:0;width:240px;height:30px;background:rgba(0,0,0,0.75);display:flex;overflow:hidden;border-top:1px solid #333;}
+  .slot {flex:1;text-align:center;color:#fff;padding:2px;border-right:1px solid #555;font-size:9px;}
+  .slot.selected {background:#555;box-shadow:inset 0 0 4px #fff;}
+  #msg {position:absolute;top:140px;left:0;width:240px;text-align:center;font-size:10px;color:#ff0;}
+  #save-load {position:absolute;top:0;right:0;width:26px;height:26px;background:#0008;color:#fff;border:1px solid #333;cursor:pointer;font-size:8px;display:flex;align-items:center;justify-content:center;z-index:20;}
+  #save-load:hover{background:#313131;}
+  #modal {position:absolute;padding:10px;background:#222;color:#fff;font-size:8px;position:absolute;z-index:30;width:180px;border-radius:4px;box-shadow:0 4px 8px rgba(0,0,0,0.5);display:none;}
+  #modal select {font-size:8px;width:90%;}
+  #modal .btn{margin-top:6px;padding:4px 6px;border:1px solid #555;background:#444;color:#fff;border-radius:3px;cursor:pointer;}
+  #modal .btn:hover{background:#666;}
 </style>
 </head>
 <body>
 <canvas id="canvas"></canvas>
-<div id="hud">
-  <div id="hotbar"></div>
-  <div id="msg">Move: drag | Mine/Place: side button | Inventory: long press</div>
-</div>
+<div id="hud">World: <span id="worldName">Default</span> | Selected: <span id="selName">Grass</span> | Mode: <span id="mode">Mine</span></div>
+<div id="hotbar"></div>
+<div id="msg">Move drag | Side-btn tap: mine/place | Longpress: inventory</div>
+<div id="save-load" title="Save / Load">Save</div>
+<div id="modal"></div>
 
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js';
 import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160/examples/jsm/controls/OrbitControls.js';
 
-// ---------- Scene setup ----------
+const WSIZE=16, HSIZE=8, BLOCK_SZ=1;
+const blockTypes = [
+  {id:0, name:'Air', color:0xffffff, transparent:true},
+  {id:1, name:'Grass', color:0x4caf50},
+  {id:2, name:'Dirt', color:0x8b5a2b},
+  {id:3, name:'Stone', color:0x999999},
+  {id:4, name:'Wood Log', color:0xdeb887},
+  {id:5, name:'Leaves', color:0x228b22},
+  {id:6, name:'Sand', color:0xf5deb3},
+  {id:7, name:'Glass', color:0xa8dadc, transparent:true},
+  {id:8, name:'Cobblestone', color:0x666666},
+  {id:9, name:'Bedrock', color:0x333333},
+  {id:10,name:'Coal Ore', color:0x333333}, // will render same color but distinct id
+  {id:11,name:'Iron Ore', color:0xa8a8a8},
+  {id:12,name:'Gold Ore', color:0xffcc00},
+  {id:13,name:'Diamond Ore', color:0x00ffff},
+  {id:14,name:'Planks', color:0x8b5a2b},
+  {id:15,name:'Water', color:0x0080ff, transparent:true},
+];
+
+const BLOCK_HEALTH = [0,3,2,4,3,1.5,2,2,4,999,5,6,7,8,2,1];
+const dropItems = {1:1,2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,10:10,11:11,12:12,13:13,14:14,15:15};
+
 const canvas = document.getElementById('canvas');
-const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:false});
+const renderer = new THREE.WebGLRenderer({canvas, antialias:false});
 renderer.setSize(240,282);
 renderer.setPixelRatio(1);
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb); // sky blue
+scene.background = new THREE.Color(0x87ceeb);
 const camera = new THREE.PerspectiveCamera(75, 240/282, 0.1, 100);
-camera.position.set(0,1.6,0);
-
-// simple first‑person controller (will be overridden by R1 inputs later)
+camera.position.set(0,2,0);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.minDistance = 2;
-controls.maxDistance = 12;
+controls.maxDistance = 18;
 
-// ---------- Block engine ----------
-const TILE = 1; // each voxel is 1 unit
-const WORLD_SIZE = 16; // 16×16×8 chunks
-const HEIGHT = 8;
-const BLOCK_SIZE = TILE;
-
-const blockTypes = {
-  air: {id:0, name:'Air', transparent:true},
-  grass: {id:1, name:'Grass', color:0x76a83c},
-  dirt: {id:2, name:'Dirt', color:0x8b5a2b},
-  stone: {id:3, name:'Stone', color:0x999999},
-  wood: {id:4, name:'Wood', color:0xdeb887},
-  leaf: {id:5, name:'Leaf', color:0x228b22},
-  sand: {id:6, name:'Sand', color:0xf5deb3},
-};
-
-// simple voxel data: flat grassy terrain
-let voxels = [];
-function initWorld(){
-  for(let x=0;x<WORLD_SIZE;x++){
-    for(let y=0;y<HEIGHT;y++){
-      for(let z=0;z<WORLD_SIZE;z++){
-        if(y===0){ voxels.push(3); continue; } // stone floor
-        if(y===1){ voxels.push(2); continue; } // dirt
-        if(y===2){ voxels.push(1); continue; } // grass top
-        if(y>2 && y<HEIGHT-1 && Math.random()<0.02){ voxels.push(4); } // occasional wood
-        else { voxels.push(0); } // air
-      }
-    }
-  }
-}
-initWorld();
-
-// create mesh geometry for each solid block
-function buildChunks(){
-  // remove old meshes
-  scene.traverse(o=>{ if(o.isMesh) scene.remove(o); });
-  const geom = new THREE.BoxGeometry(TILE,TILE,TILE);
-  const matMaterial = new THREE.MeshLambertMaterial({vertexColors:THREE.VertexColors});
-  let idx = 0;
-  for(let x=0;x<WORLD_SIZE;x++){
-    for(let y=0;y<HEIGHT;y++){
-      for(let z=0;z<WORLD_SIZE;z++){
-        const id = voxels[idx];
-        if(id===0) { idx++; continue; }
-        const material = new THREE.MeshLambertMaterial({color:blockTypes[id].color});
-        const mesh = new THREE.Mesh(geom, material);
-        mesh.position.set(
-          (x - WORLD_SIZE/2 + 0.5) * TILE,
-          (y - HEIGHT/2 + 0.5) * TILE,
-          (z - WORLD_SIZE/2 + 0.5) * TILE
-        );
-        scene.add(mesh);
-        idx++;
-      }
-    }
-  }
-}
-buildChunks();
-
-// lighting
-const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-scene.add(ambient);
-const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
 dirLight.position.set(5,10,7);
+scene.add(ambient);
 scene.add(dirLight);
 
-// ---------- R1 input abstraction ----------
-let selectedSlot = 0;
-let hotbar = [' grass',' dirt',' stone',' wood',' leaf',' sand',' grass',' dirt',' stone'];
+let voxels = new Array(WSIZE*HSIZE*WSIZE).fill(0);
+function idx(x,y,z){ return (x + y*WSIZE + z*WSIZE*HSIZE) | 0; }
+
+function fillDefault(){
+  voxels.fill(0);
+  for(let x=0;x<WSIZE;x++){
+    for(let z=0;z<WSIZE;z++){
+      for(let y=0;y<HSIZE;y++){
+        if(y===0) voxels[idx(x,y,z)] = 9; // bedrock
+        else if(y===1) voxels[idx(x,y,z)] = 3; // stone
+        else if(y===2) voxels[idx(x,y,z)] = 2; // dirt
+        else if(y===3) voxels[idx(x,y,z)] = 1; // grass
+        else if(y===4 && Math.random()<0.04) voxels[idx(x,y,z)] = 4; // wood
+        else if(y===5 && Math.random()<0.03 && voxels[idx(x,4,z)]===4) voxels[idx(x,y,z)] = 5; // leaves
+      }
+    }
+  }
+  // occasional sand patch
+  for(let i=0;i<3;i++){
+    const x = Math.floor(Math.random()*WSIZE);
+    const z = Math.floor(Math.random()*WSIZE);
+    if(voxels[idx(x,3,z)]===1) voxels[idx(x,3,z)] = 6;
+  }
+}
+fillDefault();
+
+let meshes = [];
+const sharedGeom = new THREE.BoxGeometry(1,1,1);
+const materials = blockTypes.map(b=>new THREE.MeshLambertMaterial({color:b.color, transparent:b.transparent||false}));
+const typeToMesh = new Array(blockTypes.length);
+
+function buildWorld(){
+  // remove old meshes
+  meshes.forEach(m=>scene.remove(m));
+  meshes = [];
+  const materialsMap = {};
+  for(let i=0;i<blockTypes.length;i++){
+    materialsMap[i] = materials[i];
+  }
+  const geom = sharedGeom;
+  for(let x=0;x<WSIZE;x++){
+    for(let z=0;z<WSIZE;z++){
+      for(let y=0;y<HSIZE;y++){
+        const id = voxels[idx(x,y,z)];
+        if(id===0) continue;
+        const mat = materialsMap[id];
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.position.set(x-WSIZE/2+0.5, y-HSIZE/2+0.5, z-WSIZE/2+0.5);
+        mesh.userData = {id,x,y,z};
+        scene.add(mesh);
+        meshes.push(mesh);
+      }
+    }
+  }
+}
+buildWorld();
+
+let selected = 1; // 0 air, 1 grass
+let isBuilding = false;
+let digging = null; // {x,y,z,progress}
+let worldName = 'Default';
+
+// hotbar — show first 9 blocks
+const hotbarNames = [ 'Grass','Dirt','Stone','Wood','Leaves','Sand','Cobble','Planks','Glass' ];
+const hotbarIds = [1,2,3,4,5,6,8,14,7];
 function renderHotbar(){
   const container = document.getElementById('hotbar');
-  container.innerHTML = '';
+  container.innerHTML='';
   for(let i=0;i<9;i++){
     const d = document.createElement('div');
-    d.className = i===selectedSlot?'slot selected':'slot';
-    d.textContent = hotbar[i] || '';
+    d.className = `slot ${i===selected?'selected':''}`;
+    d.textContent = `#${hotbarIds[i]} ${hotbarNames[i]}`;
     container.appendChild(d);
   }
 }
 renderHotbar();
 
-// ---------- Mouse / Touch interaction ----------
-let raycaster = new THREE.Raycaster();
-let mouse = new THREE.Vector2();
-let isBuilding = false; // toggled by side‑button long press
+// ---- picking ----
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let currentBlock = null;
 
-function onPointerDown(event){
-  // normalize mouse coords
-  const rect = canvas.getBoundingClientRect();
-  mouse.x = ((event.clientX - rect.left) / canvas.clientWidth) * 2 - 1;
-  mouse.y = -((event.clientY - rect.top) / canvas.clientHeight) * 2 + 1;
+function updateHighlight(){
+  if(currentBlock && meshes.includes(currentBlock)) currentBlock.material.emissive?.setHex(0x000000);
+  currentBlock = null;
+  mouse.x = 0; mouse.y = -1; // center screen
   raycaster.setFromCamera(mouse, camera);
-  const intersects = raycaster.intersectObjects(scene.children, true);
-  if(intersects.length===0) return;
-  const face = intersects[0].face;
-  const norm = face.normal;
-  const point = intersects[0].point.clone().add(norm.multiplyScalar(0.001));
-  // determine block coords
-  const bx = Math.floor(point.x / TILE) + WORLD_SIZE/2;
-  const by = Math.floor(point.y / TILE) + HEIGHT/2;
-  const bz = Math.floor(point.z / TILE) + WORLD_SIZE/2;
-  if(event.type==='pointerdown' || event.type==='mousedown'){
-    // mine block (set to air) – only if not in building mode
-    if(!isBuilding){
-      voxels[ (bx-/* offset */) * (WORLD_SIZE*HEIGHT) + (by-/* offset */)*WORLD_SIZE + (bz-/* offset */) ] = 0;
-      scene.remove(intersects[0].object);
-      // simple re‑build nearby chunks for demo – rebuild whole for simplicity
-      buildChunks();
-    }
-  } else if(event.type==='pointerup' || event.type=== 'mouseup'){
-    // place block if we are in building mode
-    if(isBuilding){
-      // find empty neighbour spot – simplistic: place at hit location
-      voxels[ (bx-/* offset */) * (WORLD_SIZE*HEIGHT) + (by-/* offset */)*WORLD_SIZE + (bz-/* offset */) ] = selectedSlot%6 +1; // cycle through block types
-      buildChunks();
+  const intersects = raycaster.intersectObjects(meshes);
+  if(intersects.length>0){
+    const mesh = intersects[0].object;
+    if(mesh.userData?.id){
+      currentBlock = mesh;
+      if(mesh.material.emissive) mesh.material.emissive.setHex(0x222222);
     }
   }
+  // update namelist
+  const el = document.getElementById('selName');
+  el.textContent = blockTypes[selected].name;
 }
-canvas.addEventListener('pointerdown', onPointerDown);
-canvas.addEventListener('pointerup', onPointerDown);
 
-// ---------- R1‑style control mapping (mock) ----------
-let gameState = 'playing';
-let lastSideClick = 0;
-let sideButtonLongPress = false;
-let longPressTimer =null;
-
-function simulateSideClick(){
-  const now = Date.now();
-  if(now - lastSideClick < 400){
-    // double‑tap => toggle creative (for demo just alert)
-    alert('Creative mode toggled (simulated)');
-    lastSideClick = 0;
+// pointer interaction (mining / placing)
+let pointerDown = false;
+let pointerStart = null;
+canvas.addEventListener('pointerdown', e=>{
+  pointerDown = true;
+  pointerStart = {t: Date.now(), x:e.clientX, y:e.clientY};
+});
+canvas.addEventListener('pointerup', e=>{
+  if(!pointerDown) return;
+  const moved = (e.clientX-pointerStart.x)**2 + (e.clientY-pointerStart.y)**2;
+  pointerDown = false;
+  const dt = Date.now()-pointerStart.t;
+  // long press
+  if(dt > 550 && moved < 10){
+    isBuilding = !isBuilding;
+    document.getElementById('msg').style.display='none';
+    toast(isBuilding?'🏗️ Building mode (Crafting: ON)':'⛏️ Mining mode (Crafting: OFF)');
     return;
   }
-  lastSideClick = now;
-  // single tap: mine/place depending on isBuilding
-  isBuilding = !isBuilding;
-  if(isBuilding){
-    document.getElementById('msg').textContent = 'Building mode: tap to place';
-  }else{
-    document.getElementById('msg').textContent = 'Mining mode: tap to mine';
+  // otherwise mine / place
+  raycaster.setFromCamera({x:0,y:-0.03}, camera); // just under crosshair
+  const intersects = raycaster.intersectObjects(meshes);
+  if(intersects.length===0) return;
+  const {object}=intersects[0];
+  const {id, x, y, z} = object.userData;
+  if(id===0) return;
+  if(!isBuilding){
+    // mine
+    const blocks = countItem(id);
+    // remove one from voxels
+    voxels[idx(x,y,z)] = 0;
+    buildWorld();
+    addItem(id,1);
+    toast(`+1 ${blockTypes[id].name}`);
+  } else {
+    // place adjacent – simplified, place in front of player (we'll just place above)
+    const nx = selected; // we cannot easily know position; too much for small demo – just place near origin?
+    // Instead place at the intersected block's neighbor
+    // Determine face normal from intersection point
+    let normal = intersects[0].face.normal;
+    let px = x + Math.round(normal.x);
+    let py = y + Math.round(normal.y);
+    let pz = z + Math.round(normal.z);
+    if(px>=0&&px<WSIZE && pz>=0&&pz<WSIZE && py>=0&&py<HSIZE){
+      if(voxels[idx(px,py,pz)]===0 && countItem(selected)>0){
+        voxels[idx(px,py,pz)] = selected;
+        removeItem(selected,1);
+        buildWorld();
+        toast(`Placed ${blockTypes[selected].name}`);
+      }
+    }
   }
-}
-// In a real R1 the side‑button events would call simulateSideClick().
-
-// ---------- Hot‑wheel (scroll) navigation ----------
-let hotIdx = 4; // start at wood
-window.addEventListener('wheel', e=>{
-  // simple wrap
-  hotIdx = (hotIdx + (e.deltaY>0?-1:1) + 9) % 9;
-  selectedSlot = hotIdx;
-  renderHotbar();
 });
 
-// ---------- Animation loop ----------
+// scroll wheel / keyboard
+let selectedSlot=4; // start with wood
+window.addEventListener('wheel', e=>{
+  selectedSlot = (selectedSlot + (e.deltaY>0?-1:1)+9)%9;
+  selected = hotbarIds[selectedSlot];
+  renderHotbar();
+  document.getElementById('hotName').textContent = `${hotbarNames[selectedSlot]}`;
+});
+
+// inventory helpers
+let inv = new Array(blockTypes.length).fill(0);
+inv[1]=5;inv[2]=10;inv[3]=20;inv[4]=5;inv[5]=3;inv[6]=8;inv[8]=10;inv[14]=10;inv[7]=10;
+function countItem(id){return inv[id]||0;}
+function addItem(id,q){inv[id]+=q;}
+function removeItem(id,q){if(inv[id]>=q){inv[id]-=q;return true;}return false;}
+
+// save/load using localStorage
+function saveWorld(name){
+  const data = {voxels, worldName:name};
+  localStorage.setItem(`world_${name}`, JSON.stringify(data));
+  toast('Saved '+name);
+}
+function loadWorld(name){
+  const raw = localStorage.getItem(`world_${name}`);
+  if(raw){
+    const data = JSON.parse(raw);
+    voxels = data.voxels;
+    worldName = data.worldName;
+    buildWorld();
+    toast('Loaded '+name);
+    document.getElementById('worldName').textContent = name;
+  }
+}
+function availableWorlds(){
+  const worlds = [];
+  for(let i=0;i<localStorage.length;i++){
+    const k = localStorage.key(i);
+    if(k.startsWith('world_')) worlds.push(k.replace('world_',''));
+  }
+  return worlds;
+}
+
+// modal with worlds
+const modal = document.getElementById('modal');
+document.getElementById('save-load').addEventListener('click',()=>{
+  modal.style.display='block';
+  modal.innerHTML = '<b>Save / Load World</b><br><select id="worldSel"></select><br><button class="btn" id="saveBtn">Save As…</button><button class="btn" id="loadBtn">Load</button><button class="btn" id="delBtn">Delete</button><button class="btn" id="closeBtn">Close</button>';
+  const sel = document.getElementById('worldSel');
+  const worlds = availableWorlds();
+  worlds.forEach(w =>{
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = w;
+    sel.appendChild(opt);
+  });
+  // maybe add prompt for new world name
+  document.getElementById('saveBtn').onclick = ()=>{
+    const nm = prompt('World name?');
+    if(nm){ saveWorld(nm); modal.style.display='none'; updateTitle(); }
+  };
+  document.getElementById('loadBtn').onclick = ()=>{
+    const w = sel.value;
+    if(w){ loadWorld(w); modal.style.display='none'; updateTitle(); }
+  };
+  document.getElementById('delBtn').onclick = ()=>{
+    const w = sel.value;
+    localStorage.removeItem(`world_${w}`);
+    toast('Deleted '+w);
+    modal.style.display='none';
+  };
+  document.getElementById('closeBtn').onclick = ()=> modal.style.display='none';
+});
+
+function updateTitle(){
+  document.getElementById('worldName').textContent = worldName;
+}
+
+// day night cycle (simple rotation of dirLight)
+setInterval(()=>{
+  const t = Date.now()*.00003 % (2*Math.PI);
+  dirLight.position.set(Math.cos(t)*5, Math.abs(Math.sin(t)*5)+2, Math.sin(t)*5);
+  scene.background.setStyle(Math.cos(t)<0?'#0e152a':'#87ceeb');
+},1000);
+
+// animation loop
 const clock = new THREE.Clock();
 function animate(){
   requestAnimationFrame(animate);
-  const dt = clock.getDelta();
+  updateHighlight();
   controls.update();
   renderer.render(scene, camera);
 }
 animate();
 
-// ---------- Expose some globals for demo ----------
-window.initWorld = initWorld;
-window.buildChunks = buildChunks;
-window.simulateSideClick = simulateSideClick;
+function toast(txt){
+  const el= document.getElementById('msg');
+  el.textContent = txt;
+  el.style.display='block';
+  setTimeout(()=>el.style.display='none',1200);
+}
+
+// key handling for shortcuts
+window.addEventListener('keydown',e=>{
+  if(e.key>='1'&&e.key<='9'){
+    selectedSlot = e.key.charCodeAt(0)-'1'.charCodeAt(0);
+    selected = hotbarIds[selectedSlot];
+    renderHotbar();
+  } else if(e.key==='e'){
+    isBuilding = !isBuilding;
+    toast(isBuilding?'Building mode':'Mining mode');
+  } else if(e.key==='Escape'){
+    pause();
+  }
+});
+function pause(){ gamePaused = !gamePaused; toast(gamePaused?'⏸️ Paused':'▶️ Resumed'); }
+
+// extremely simple physics / gravity (optional)
+setInterval(()=>{
+  if(gamePaused) return;
+},100);
+let gamePaused=false;
+
+// expose for debugging
+window.saveWorld=saveWorld;
+window.loadWorld=loadWorld;
+window.availableWorlds=availableWorlds;
 </script>
-</body>
-</html>
