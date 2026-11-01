@@ -37,7 +37,7 @@
 </script>
 <script type="module">
 import * as THREE from 'three';
-import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160/examples/jsm/controls/OrbitControls.js';
+// OrbitControls removed; simple manual camera control via touch events below.
 
 const WSIZE=16, HSIZE=8, BLOCK_SZ=1;
 const blockTypes = [
@@ -70,10 +70,8 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
 const camera = new THREE.PerspectiveCamera(75, 240/282, 0.1, 100);
 camera.position.set(0,2,0);
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.minDistance = 2;
-controls.maxDistance = 18;
+// no controls; keep camera facing somewhat downwards
+camera.lookAt(0,0,0);
 
 const ambient = new THREE.AmbientLight(0xffffff, 0.7);
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
@@ -323,7 +321,7 @@ const clock = new THREE.Clock();
 function animate(){
   requestAnimationFrame(animate);
   updateHighlight();
-  controls.update();
+  // controls removed
   renderer.render(scene, camera);
 }
 animate();
