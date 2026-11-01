@@ -2,124 +2,142 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>R1 Minecraft – Enhanced</title>
+<title>R1 Minecraft Enhanced</title>
 <meta name="viewport" content="width=240,height=282,initial-scale=1.0,user-scalable=no">
 <style>
-  html,body {margin:0;padding:0;overflow:hidden;background:#000;font-family:sans-serif;}
-  #canvas {display:block;width:240px;height:282px;}
-  #hud {position:absolute;top:0;left:0;width:240px;padding:4px;background:rgba(0,0,0,0.65);color:#fff;font-size:8px;line-height:1.4;z-index:10;}
-  #hotbar {position:absolute;bottom:4px;left:0;width:240px;height:30px;background:rgba(0,0,0,0.75);display:flex;overflow:hidden;border-top:1px solid #333;}
-  .slot {flex:1;text-align:center;color:#fff;padding:2px;border-right:1px solid #555;font-size:9px;}
-  .slot.selected {background:#555;box-shadow:inset 0 0 4px #fff;}
-  #msg {position:absolute;top:140px;left:0;width:240px;text-align:center;font-size:10px;color:#ff0;}
-  #save-load {position:absolute;top:0;right:0;width:26px;height:26px;background:#0008;color:#fff;border:1px solid #333;cursor:pointer;font-size:8px;display:flex;align-items:center;justify-content:center;z-index:20;}
-  #save-load:hover{background:#313131;}
-  #modal {position:absolute;padding:10px;background:#222;color:#fff;font-size:8px;position:absolute;z-index:30;width:180px;border-radius:4px;box-shadow:0 4px 8px rgba(0,0,0,0.5);display:none;}
-  #modal select {font-size:8px;width:90%;}
-  #modal .btn{margin-top:6px;padding:4px 6px;border:1px solid #555;background:#444;color:#fff;border-radius:3px;cursor:pointer;}
-  #modal .btn:hover{background:#666;}
+html,body {margin:0;padding:0;overflow:hidden;background:#000;font-family:sans-serif;}
+#canvas {display:block;width:240px;height:282px;}
+#hud {position:absolute;top:0;left:0;width:240px;padding:4px;background:rgba(0,0,0,0.68);color:#fff;font-size:8px;line-height:1.4;z-index:10;}
+#hotbar {position:absolute;bottom:4px;left:0;width:240px;height:32px;background:rgba(0,0,0,0.78);display:flex;overflow:hidden;border-top:1px solid #444;}
+.slot {flex:1;text-align:center;color:#fff;font-size:7px;padding:2px;border-right:1px solid #555;}
+.slot.selected {background:#666;box-shadow:inset 0 0 4px #fff;}
+#msg {position:absolute;top:140px;left:0;width:240px;text-align:center;font-size:9px;color:#ff0;opacity:0.95;}
+#save-load {position:absolute;top:0;right:0;width:30px;height:26px;background:#222;color:#fff;border:1px solid #555;border-radius:3px;cursor:pointer;font-size:7px;display:flex;align-items:center;justify-content:center;z-index:20;}
+#crosshair {position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:10px;height:10px;border:1px solid #fff;pointer-events:none;z-index:5;}
+#crosshair::before{content:"";position:absolute;top:4px;left:-4px;width:4px;height:1px;background:#fff;}
+#crosshair::after{content:"";position:absolute;top:-4px;left:4px;width:1px;height:4px;background:#fff;}
+#stats {font-size:7px;opacity:0.8;}
+#modal {position:absolute;padding:8px;background:#151515;color:#fff;font-size:8px;z-index:30;width:180px;border-radius:4px;box-shadow:0 4px 8px rgba(0,0,0,0.5);display:none;max-height:230px;overflow:auto;}
+#modal select,#modal button {font-size:8px;margin:3px;}
+#modal .btn{padding:3px 5px;border:1px solid #555;background:#333;color:#fff;border-radius:3px;cursor:pointer;}
+#modal .btn:hover{background:#555;}
 </style>
 </head>
 <body>
 <canvas id="canvas"></canvas>
-<div id="hud">World: <span id="worldName">Default</span> | Selected: <span id="selName">Grass</span> | Mode: <span id="mode">Mine</span></div>
+<div id="hud">
+  World: <span id="worldName">Default</span> |
+  Selected: <span id="selName">Grass</span> |
+  Mode: <span id="mode">Mine</span><br>
+  <span id="stats">HP 20 Food 20 | Day 7:00</span>
+</div>
 <div id="hotbar"></div>
-<div id="msg">Move drag | Side-btn tap: mine/place | Longpress: inventory</div>
+<div id="crosshair"></div>
+<div id="msg" style="display:none;">Move drag | Side tap mine/place | Long press mode toggle</div>
 <div id="save-load" title="Save / Load">Save</div>
 <div id="modal"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160/build/three.min.js"></script>
 <script>
 const THREE = window.THREE;
-// OrbitControls removed; simple manual camera control via touch events below.
+const WSIZE = 16; const HSIZE = 12; const BLOCK_SZ = 1;
 
-const WSIZE=16, HSIZE=8, BLOCK_SZ=1;
 const blockTypes = [
   {id:0, name:'Air', color:0xffffff, transparent:true},
   {id:1, name:'Grass', color:0x4caf50},
   {id:2, name:'Dirt', color:0x8b5a2b},
-  {id:3, name:'Stone', color:0x999999},
+  {id:3, name:'Stone', color:0x888888},
   {id:4, name:'Wood Log', color:0xdeb887},
-  {id:5, name:'Leaves', color:0x228b22},
+  {id:5, name:'Leaves', color:0x228b22, transparent:true},
   {id:6, name:'Sand', color:0xf5deb3},
   {id:7, name:'Glass', color:0xa8dadc, transparent:true},
-  {id:8, name:'Cobblestone', color:0x666666},
+  {id:8, name:'Cobble', color:0x666666},
   {id:9, name:'Bedrock', color:0x333333},
-  {id:10,name:'Coal Ore', color:0x333333}, // will render same color but distinct id
+  {id:10,name:'Coal Ore', color:0x333333},
   {id:11,name:'Iron Ore', color:0xa8a8a8},
-  {id:12,name:'Gold Ore', color:0xffcc00},
-  {id:13,name:'Diamond Ore', color:0x00ffff},
+  {id:12,name:'Gold Ore', color:0xffd700},
+  {id:13,name:'Diamond Ore',color:0x00ffff},
   {id:14,name:'Planks', color:0x8b5a2b},
-  {id:15,name:'Water', color:0x0080ff, transparent:true},
+  {id:15,name:'Water', color:0x0080ff, transparent:true}
 ];
 
 const BLOCK_HEALTH = [0,3,2,4,3,1.5,2,2,4,999,5,6,7,8,2,1];
-const dropItems = {1:1,2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,10:10,11:11,12:12,13:13,14:14,15:15};
+const hotbarNames = ['Grass','Dirt','Stone','Wood','Leaves','Sand','Cobble','Planks','Glass'];
+const hotbarIds = [1,2,3,4,5,6,8,14,7];
 
-const canvas = document.getElementById('canvas');
-const renderer = new THREE.WebGLRenderer({canvas, antialias:false});
-renderer.setSize(240,282);
-renderer.setPixelRatio(1);
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb);
-const camera = new THREE.PerspectiveCamera(75, 240/282, 0.1, 100);
-camera.position.set(0,2,0);
-// no controls; keep camera facing somewhat downwards
-camera.lookAt(0,0,0);
+const voxels = new Uint8Array(WSIZE * HSIZE * WSIZE).fill(0);
+function idx(x,y,z){ return (x + (y*WSIZE) + (z*WSIZE*HSIZE)) | 0; }
 
-const ambient = new THREE.AmbientLight(0xffffff, 0.7);
-const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
-dirLight.position.set(5,10,7);
-scene.add(ambient);
-scene.add(dirLight);
-
-let voxels = new Array(WSIZE*HSIZE*WSIZE).fill(0);
-function idx(x,y,z){ return (x + y*WSIZE + z*WSIZE*HSIZE) | 0; }
+function terrainHeight(x,z){
+  const n = (((x*37) ^ (z*53)) * 1e6) % 7;
+  return 3 + (n > 3 ? 2 : (n < 2 ? 0 : 1));
+}
 
 function fillDefault(){
   voxels.fill(0);
   for(let x=0;x<WSIZE;x++){
     for(let z=0;z<WSIZE;z++){
+      const th = terrainHeight(x,z);
       for(let y=0;y<HSIZE;y++){
-        if(y===0) voxels[idx(x,y,z)] = 9; // bedrock
-        else if(y===1) voxels[idx(x,y,z)] = 3; // stone
-        else if(y===2) voxels[idx(x,y,z)] = 2; // dirt
-        else if(y===3) voxels[idx(x,y,z)] = 1; // grass
-        else if(y===4 && Math.random()<0.04) voxels[idx(x,y,z)] = 4; // wood
-        else if(y===5 && Math.random()<0.03 && voxels[idx(x,4,z)]===4) voxels[idx(x,y,z)] = 5; // leaves
+        if(y===0){ voxels[idx(x,y,z)] = 9; continue; }
+        if(y <= th-1 && y>=0){
+          if(y===th-1) voxels[idx(x,y,z)] = 1;
+          else if(y>th-3) voxels[idx(x,y,z)] = 2;
+          else voxels[idx(x,y,z)] = 3;
+        }
       }
+      // trees
+      if(Math.random()<0.05 && th+2 < HSIZE){
+        const t = th+1;
+        if(t+2<HSIZE){
+          voxels[idx(x,t,z)] = 4; voxels[idx(x,t+1,z)] = 4;
+          for(let dx=-1;dx<=1;dx++)
+          for(let dz=-1;dz<=1;dz++)
+          if(x+dx>=0 && x+dx<WSIZE && z+dz>=0 && z+dz<WSIZE && t+2>=0 && t+2<HSIZE)
+            voxels[idx(x+dx,t+2,z+dz)] = 5;
+        }
+      }
+      // sand patches near surface
+      if(terrHeight(x,z)%2===0 && Math.random()<0.1) voxels[idx(x,th,z)] = 6;
     }
-  }
-  // occasional sand patch
-  for(let i=0;i<3;i++){
-    const x = Math.floor(Math.random()*WSIZE);
-    const z = Math.floor(Math.random()*WSIZE);
-    if(voxels[idx(x,3,z)]===1) voxels[idx(x,3,z)] = 6;
   }
 }
 fillDefault();
 
-let meshes = [];
-const sharedGeom = new THREE.BoxGeometry(1,1,1);
-const materials = blockTypes.map(b=>new THREE.MeshLambertMaterial({color:b.color, transparent:b.transparent||false}));
-const typeToMesh = new Array(blockTypes.length);
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:false, alpha:false});
+renderer.setSize(240,282);
+renderer.setPixelRatio(1);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+const camera = new THREE.PerspectiveCamera(75, 240/282, 0.1, 100);
+camera.position.set(0, 2.2, 0);
 
+const ambient = new THREE.AmbientLight(0xffffff,0.7);
+const sun = new THREE.DirectionalLight(0xffffff,0.9);
+sun.position.set(5,10,7);
+scene.add(ambient);
+scene.add(sun);
+
+const geometry = new THREE.BoxGeometry(1,1,1);
+const matCache = {};
+function mat(id, transparent){
+  const key = id+'_'+(transparent?'1':'0');
+  if(matCache[key]) return matCache[key];
+  const m = new THREE.MeshLambertMaterial({color:blockTypes[id].color, transparent:blockTypes[id].transparent||false});
+  matCache[key]=m; return m;
+}
+
+let meshes = [];
 function buildWorld(){
-  // remove old meshes
   meshes.forEach(m=>scene.remove(m));
   meshes = [];
-  const materialsMap = {};
-  for(let i=0;i<blockTypes.length;i++){
-    materialsMap[i] = materials[i];
-  }
-  const geom = sharedGeom;
   for(let x=0;x<WSIZE;x++){
     for(let z=0;z<WSIZE;z++){
       for(let y=0;y<HSIZE;y++){
         const id = voxels[idx(x,y,z)];
         if(id===0) continue;
-        const mat = materialsMap[id];
-        const mesh = new THREE.Mesh(geom, mat);
+        const mesh = new THREE.Mesh(geometry, mat(id, blockTypes[id].transparent));
         mesh.position.set(x-WSIZE/2+0.5, y-HSIZE/2+0.5, z-WSIZE/2+0.5);
         mesh.userData = {id,x,y,z};
         scene.add(mesh);
@@ -130,226 +148,235 @@ function buildWorld(){
 }
 buildWorld();
 
-let selected = 1; // 0 air, 1 grass
-let isBuilding = false;
-let digging = null; // {x,y,z,progress}
-let worldName = 'Default';
-
-// hotbar — show first 9 blocks
-const hotbarNames = [ 'Grass','Dirt','Stone','Wood','Leaves','Sand','Cobble','Planks','Glass' ];
-const hotbarIds = [1,2,3,4,5,6,8,14,7];
-function renderHotbar(){
-  const container = document.getElementById('hotbar');
-  container.innerHTML='';
-  for(let i=0;i<9;i++){
-    const d = document.createElement('div');
-    d.className = `slot ${i===selected?'selected':''}`;
-    d.textContent = `#${hotbarIds[i]} ${hotbarNames[i]}`;
-    container.appendChild(d);
-  }
-}
-renderHotbar();
-
-// ---- picking ----
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
-let currentBlock = null;
 
-function updateHighlight(){
-  if(currentBlock && meshes.includes(currentBlock)) currentBlock.material.emissive?.setHex(0x000000);
-  currentBlock = null;
-  mouse.x = 0; mouse.y = -1; // center screen
-  raycaster.setFromCamera(mouse, camera);
-  const intersects = raycaster.intersectObjects(meshes);
-  if(intersects.length>0){
-    const mesh = intersects[0].object;
-    if(mesh.userData?.id){
-      currentBlock = mesh;
-      if(mesh.material.emissive) mesh.material.emissive.setHex(0x222222);
-    }
+let selectedSlot = 4;
+let selected = hotbarIds[selectedSlot];
+let isBuildingMode = false;
+let player = {x:0,hp:20,food:20,vx:0,vy:0,vz:0,onGround:false,swing:0};
+let gamePaused=false;
+const inv = new Array(blockTypes.length).fill(0);
+// start loot
+inv[1]=16;inv[2]=32;inv[3]=64;inv[4]=32;inv[5]=16;inv[6]=16;inv[8]=64;inv[14]=64;inv[7]=16;
+function invCount(id){return inv[id]||0;}
+function invAdd(id,q){ inv[id]+=q; }
+function invRemove(id,q){ if(inv[id]>=q){ inv[id]-=q; return true;} return false;}
+
+const hudHotbar = document.getElementById('hotbar');
+const selName = staticEl('selName','%grass'? 'Grass':'Grass');
+function staticEl(id, fallback){ const e=document.getElementById(id); return e||{textContent:fallback}; }
+
+function renderHotbarUI(){
+  hudHotbar.innerHTML='';
+  for(let i=0;i<9;i++){
+    const d = document.createElement('div');
+    d.className = 'slot '+(i=== selectedSlot ? 'selected':'');
+    d.textContent = (i+1)+':'+hotbarNames[i]+'\n('+inv[hotbarIds[i]]+')';
+    hudHotbar.appendChild(d);
   }
-  // update namelist
-  const el = document.getElementById('selName');
-  el.textContent = blockTypes[selected].name;
 }
+renderHotbarUI();
+function updateSelected(){
+  selName.textContent = blockTypes[selected].name;
+  renderHotbarUI();
+}
+updateSelected();
 
-// pointer interaction (mining / placing)
-let pointerDown = false;
-let pointerStart = null;
+let pointerDownAt=null;
 canvas.addEventListener('pointerdown', e=>{
-  pointerDown = true;
-  pointerStart = {t: Date.now(), x:e.clientX, y:e.clientY};
+  pointerDownAt = {t:Date.now(), x:e.clientX, y:e.clientY, moved:false};
+  const mm = ev=>{ if((ev.clientX-pointerDownAt.x)**2+(ev.clientY-pointerDownAt.y)**2>20) pointerDownAt.moved=true;};
+  canvas.addEventListener('pointermove', mm);
+  window._tmpMM = ()=> canvas.removeEventListener('pointermove', mm);
 });
 canvas.addEventListener('pointerup', e=>{
-  if(!pointerDown) return;
-  const moved = (e.clientX-pointerStart.x)**2 + (e.clientY-pointerStart.y)**2;
-  pointerDown = false;
-  const dt = Date.now()-pointerStart.t;
-  // long press
-  if(dt > 550 && moved < 10){
-    isBuilding = !isBuilding;
-    document.getElementById('msg').style.display='none';
-    toast(isBuilding?'🏗️ Building mode (Crafting: ON)':'⛏️ Mining mode (Crafting: OFF)');
+  if(window._tmpMM) window._tmpMM();
+  if(!pointerDownAt) return;
+  const elapsed = Date.now()-pointerDownAt.t;
+  const moved = (e.clientX-pointerDownAt.x)**2+(e.clientY-pointerDownAt.y)**2;
+  if(elapsed>500 && moved<15){
+    isBuildingMode = !isBuildingMode;
+    toast(isBuildingMode?'?? Building mode':'?? Mining mode');
+    document.getElementById('mode').textContent = isBuildingMode? 'Build':'Mine';
     return;
   }
-  // otherwise mine / place
-  raycaster.setFromCamera({x:0,y:-0.03}, camera); // just under crosshair
-  const intersects = raycaster.intersectObjects(meshes);
-  if(intersects.length===0) return;
-  const {object}=intersects[0];
-  const {id, x, y, z} = object.userData;
-  if(id===0) return;
-  if(!isBuilding){
-    // mine
-    const blocks = countItem(id);
-    // remove one from voxels
-    voxels[idx(x,y,z)] = 0;
-    buildWorld();
-    addItem(id,1);
-    toast(`+1 ${blockTypes[id].name}`);
+  if(moved>15){ return; }
+  // aim for center-ish crosshair
+  raycaster.setFromCamera(new THREE.Vector2(0,-0.02), camera);
+  const hits = raycaster.intersectObjects(meshes);
+  if(hits.length===0) return;
+  const h = hits[0];
+  if(!isBuildingMode){
+    const d = h.object.userData;
+    if(d && d.id !== 9){
+      voxels[idx(d.x,d.y,d.z)] = 0;
+      rebuildMesh(d.x,d.y,d.z); toast('+1 '+blockTypes[d.id].name); invAdd(d.id,1);
+    }
   } else {
-    // place adjacent – simplified, place in front of player (we'll just place above)
-    const nx = selected; // we cannot easily know position; too much for small demo – just place near origin?
-    // Instead place at the intersected block's neighbor
-    // Determine face normal from intersection point
-    let normal = intersects[0].face.normal;
-    let px = x + Math.round(normal.x);
-    let py = y + Math.round(normal.y);
-    let pz = z + Math.round(normal.z);
-    if(px>=0&&px<WSIZE && pz>=0&&pz<WSIZE && py>=0&&py<HSIZE){
-      if(voxels[idx(px,py,pz)]===0 && countItem(selected)>0){
-        voxels[idx(px,py,pz)] = selected;
-        removeItem(selected,1);
-        buildWorld();
-        toast(`Placed ${blockTypes[selected].name}`);
+    // place
+    const d = h.object.userData;
+    const normal = h.face.normal.clone();
+    const nx = d.x + Math.round(normal.x);
+    const ny = d.y + Math.round(normal.y);
+    const nz = d.z + Math.round(normal.z);
+    if (nx>=0 && ny>=0 && nz>=0 && nx<WSIZE && ny<HSIZE && nz<WSIZE && voxels[idx(nx,ny,nz)]===0){
+      const selId = hotbarIds[selectedSlot];
+      if(inv[selId]>0){
+        voxels[idx(nx,ny,nz)] = selId;
+        inv[selId]--;
+        buildMesh(nx,ny,nz);
+        toast('Placed '+blockTypes[selId].name);
+        renderHotbarUI();
+      } else {
+        toast('No '+blockTypes[selId].name+' left');
       }
     }
   }
 });
 
-// scroll wheel / keyboard
-let selectedSlot=4; // start with wood
-window.addEventListener('wheel', e=>{
-  selectedSlot = (selectedSlot + (e.deltaY>0?-1:1)+9)%9;
-  selected = hotbarIds[selectedSlot];
-  renderHotbar();
-  document.getElementById('hotName').textContent = `${hotbarNames[selectedSlot]}`;
+function buildMesh(x,y,z){
+  const id = voxels[idx(x,y,z)];
+  if(id===0) return;
+  const m = new THREE.Mesh(geometry, mat(id, blockTypes[id].transparent));
+  m.position.set(x-WSIZE/2+0.5, y-HSIZE/2+0.5, z-WSIZE/2+0.5);
+  m.userData = {id,x,y,z};
+  scene.add(m);
+  meshes.push(m);
+}
+function rebuildMesh(x,y,z){
+  // remove then rebuild one block
+  const m = meshes.find(mm=>mm.userData.x===x && mm.userData.y===y && mm.userData.z===z);
+  if(m){ scene.remove(m); meshes = meshes.filter(mm=>mm!==m); }
+  buildMesh(x,y,z);
+}
+
+// camera rotate
+let drag=false; let last={x:0,y:0};
+canvas.addEventListener('pointerdown', e=>{ drag=true; last={x:e.clientX,y:e.clientY};});
+window.addEventListener('pointerup',()=>drag=false);
+canvas.addEventListener('pointermove', e=>{
+  if(!drag) return;
+  const nx = (e.clientX-last.x)*0.02;
+  const ny = (e.clientY-last.y)*0.02;
+  camera.rotation.y -= nx;
+  camera.rotation.x -= ny;
+  camera.rotation.x = Math.max(-Math.PI/2+0.1, Math.min(Math.PI/2-0.1, camera.rotation.x));
+  last={x:e.clientX,y:e.clientY};
 });
 
-// inventory helpers
-let inv = new Array(blockTypes.length).fill(0);
-inv[1]=5;inv[2]=10;inv[3]=20;inv[4]=5;inv[5]=3;inv[6]=8;inv[8]=10;inv[14]=10;inv[7]=10;
-function countItem(id){return inv[id]||0;}
-function addItem(id,q){inv[id]+=q;}
-function removeItem(id,q){if(inv[id]>=q){inv[id]-=q;return true;}return false;}
-
-// save/load using localStorage
-function saveWorld(name){
-  const data = {voxels, worldName:name};
-  localStorage.setItem(`world_${name}`, JSON.stringify(data));
-  toast('Saved '+name);
-}
-function loadWorld(name){
-  const raw = localStorage.getItem(`world_${name}`);
-  if(raw){
-    const data = JSON.parse(raw);
-    voxels = data.voxels;
-    worldName = data.worldName;
-    buildWorld();
-    toast('Loaded '+name);
-    document.getElementById('worldName').textContent = name;
-  }
-}
-function availableWorlds(){
-  const worlds = [];
-  for(let i=0;i<localStorage.length;i++){
-    const k = localStorage.key(i);
-    if(k.startsWith('world_')) worlds.push(k.replace('world_',''));
-  }
-  return worlds;
-}
-
-// modal with worlds
-const modal = document.getElementById('modal');
-document.getElementById('save-load').addEventListener('click',()=>{
-  modal.style.display='block';
-  modal.innerHTML = '<b>Save / Load World</b><br><select id="worldSel"></select><br><button class="btn" id="saveBtn">Save As…</button><button class="btn" id="loadBtn">Load</button><button class="btn" id="delBtn">Delete</button><button class="btn" id="closeBtn">Close</button>';
-  const sel = document.getElementById('worldSel');
-  const worlds = availableWorlds();
-  worlds.forEach(w =>{
-    const opt = document.createElement('option');
-    opt.value = opt.textContent = w;
-    sel.appendChild(opt);
-  });
-  // maybe add prompt for new world name
-  document.getElementById('saveBtn').onclick = ()=>{
-    const nm = prompt('World name?');
-    if(nm){ saveWorld(nm); modal.style.display='none'; updateTitle(); }
-  };
-  document.getElementById('loadBtn').onclick = ()=>{
-    const w = sel.value;
-    if(w){ loadWorld(w); modal.style.display='none'; updateTitle(); }
-  };
-  document.getElementById('delBtn').onclick = ()=>{
-    const w = sel.value;
-    localStorage.removeItem(`world_${w}`);
-    toast('Deleted '+w);
-    modal.style.display='none';
-  };
-  document.getElementById('closeBtn').onclick = ()=> modal.style.display='none';
-});
-
-function updateTitle(){
-  document.getElementById('worldName').textContent = worldName;
-}
-
-// day night cycle (simple rotation of dirLight)
-setInterval(()=>{
-  const t = Date.now()*.00003 % (2*Math.PI);
-  dirLight.position.set(Math.cos(t)*5, Math.abs(Math.sin(t)*5)+2, Math.sin(t)*5);
-  scene.background.setStyle(Math.cos(t)<0?'#0e152a':'#87ceeb');
-},1000);
-
-// animation loop
-const clock = new THREE.Clock();
-function animate(){
-  requestAnimationFrame(animate);
-  updateHighlight();
-  // controls removed
-  renderer.render(scene, camera);
-}
-animate();
-
-function toast(txt){
-  const el= document.getElementById('msg');
-  el.textContent = txt;
-  el.style.display='block';
-  setTimeout(()=>el.style.display='none',1200);
-}
-
-// key handling for shortcuts
-window.addEventListener('keydown',e=>{
+// keyboard
+window.addEventListener('keydown', e=>{
   if(e.key>='1'&&e.key<='9'){
     selectedSlot = e.key.charCodeAt(0)-'1'.charCodeAt(0);
     selected = hotbarIds[selectedSlot];
-    renderHotbar();
+    renderHotbarUI();
+    document.getElementById('selName').textContent = blockTypes[selected].name;
   } else if(e.key==='e'){
-    isBuilding = !isBuilding;
-    toast(isBuilding?'Building mode':'Mining mode');
+    isBuildingMode=!isBuildingMode;
+    toast(isBuildingMode?'Building':'Mining');
+    document.getElementById('mode').textContent = isBuildingMode?'Build':'Mine';
   } else if(e.key==='Escape'){
-    pause();
-  }
+    gamePaused=!gamePaused;
+    toast(gamePaused?'Paused':'Resumed');
+  } else if(e.key==='c'){ openSaveModal(true); }
 });
-function pause(){ gamePaused = !gamePaused; toast(gamePaused?'⏸️ Paused':'▶️ Resumed'); }
+window.addEventListener('keyup', e=>{});
 
-// extremely simple physics / gravity (optional)
-setInterval(()=>{
+
+// player movement simple
+const keys = new Set();
+window.addEventListener('keydown', e=>keys.add(e.key));
+window.addEventListener('keyup', e=>keys.delete(e.key));
+
+function playerUpdate(dt){
   if(gamePaused) return;
-},100);
-let gamePaused=false;
+  const speed=4.0;
+  const rd=0.12;
+  const dir = new THREE.Vector3(0,0,0);
+  if(keys.has('w')) dir.z -= 1;
+  if(keys.has('s')) dir.z += 1;
+  if(keys.has('a')) dir.x -= 1;
+  if(keys.has('d')) dir.x += 1;
+  dir.applyEuler(new THREE.Euler(0, camera.rotation.y,0));
+  player.vx = dir.x*speed;
+  player.vz = dir.z*speed;
+  player.vy += -9.8*dt;
+  player.x += player.vx*dt*0.15;
+  player.y += player.vy*dt*0.15;
+  player.z += player.vz*dt*0.15;
+  // descent floor clamp
+  if(player.y<0.2){
+    player.y=0.2; player.vy=0; player.onGround=true;
+  } else {
+    player.onGround=false;
+  }
+  camera.position.x = player.x;
+  camera.position.y = player.y + 1.1;
+  camera.position.z = player.z;
+}
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  if(!gamePaused){
+    const dt = clock.getDelta();
+    playerUpdate(dt);
+    // update sun/time
+    worldTime = (worldTime + dt*0.04)%1;
+    const angle = (worldTime - 0.28)*Math.PI*2;
+    sun.position.set(Math.cos(angle), Math.sin(angle)*1.6, 2);
+    scene.background.setStyle(Math.sin(angle)>0?'#87ceeb':'#0e152a');
+    const hrs = Math.floor((worldTime*24)%24);
+    const mins = Math.floor((worldTime*24*60)%60).toString().padStart(2,'0');
+    document.getElementById('stats').textContent = `HP ${player.hp} Food ${player.food} | ${hrs}:${mins}`;
+    updateHighlight();
+  }
+  renderer.render(scene, camera);
+}
+let worldTime=0.38;
+animate();
 
-// expose for debugging
-window.saveWorld=saveWorld;
-window.loadWorld=loadWorld;
-window.availableWorlds=availableWorlds;
+function toast(txt){
+  const el = document.getElementById('msg');
+  el.textContent = txt;
+  el.style.display='block';
+  clearTimeout(window._tO); window._tO=setTimeout(()=>el.style.display='none', 1300);
+}
+toast('Ready - press long side to toggle mining/build mode.');
+
+// save/load modal
+const modal = document.getElementById('modal');
+function openSaveModal(flag){
+  modal.style.display = flag ? 'block' : 'none';
+  if(flag){
+    modal.innerHTML = '<b>Save / Load World</b><br><button class="btn" id="saveAs">Save as…</button><button class="btn" id="loadW">Load…</button><button class="btn" id="delW">Delete…</button><button class="btn" id="closeM">Close</button>';
+    document.getElementById('saveAs').onclick = ()=>{
+      const nm = prompt('World name?');
+      if(nm){ localStorage.setItem('world_'+nm, JSON.stringify({voxels:[...voxels], name:nm, selected, selectedSlot})); toast('Saved '+nm); modal.style.display='none'; document.getElementById('worldName').textContent=nm;};
+    };
+    document.getElementById('loadW').onclick = ()=>{
+      const name = prompt('World name to load?');
+      if(name && localStorage.getItem('world_'+name)){
+        const d = JSON.parse(localStorage.getItem('world_'+name));
+        voxels = new Uint8Array(d.voxels);
+        worldName = d.name; selected = d.selected; selectedSlot = d.slot;
+        buildWorld(); renderHotbarUI();
+        document.getElementById('worldName').textContent = name;
+        toast('Loaded '+name);
+        modal.style.display='none';
+      }
+    };
+    document.getElementById('delW').onclick = ()=>{
+      const name = prompt('Delete world?');
+      if(name){ localStorage.removeItem('world_'+name); toast('Deleted '+name); modal.style.display='none'; }
+    };
+    document.getElementById('closeM').onclick = ()=> modal.style.display='none';
+  }
+}
+document.getElementById('save-load').addEventListener('click',()=> openSaveModal(true));
+window.openSaveModal=openSaveModal;
+window.worldName=worldName;
+window.selected=selected;
 </script>
+</body>
+</html
