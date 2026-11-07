@@ -70,6 +70,9 @@ const blockTypes = [
 const BLOCK_HEALTH = [0,3,2,4,3,1.5,2,2,4,999,5,6,7,8,2,1,0];
 
 const hotbarIds = [1,2,3,4,5,6,8,14,7];
+const hotbarNames = hotbarIds.map(id => { const bt = blockTypes.find(b=>b.id===id); return bt ? bt.name : String(id); });
+let worldName = 'Default';
+let worldTime = 0.38;
 
 const canvas = document.getElementById('canvas');
 const renderer = new THREEG.WebGLRenderer({canvas: canvas, antialias:false});
@@ -159,6 +162,7 @@ function fillDefault(){
     }
   }
   for(let x=0;x<WSIZE;x++) for(let z=0;z<WSIZE;z++){
+    const th = terrainHeight(x,z);
     setval(x,th,z, 3); // ensure no air at surface
   }
 }
@@ -426,7 +430,7 @@ function animate(){
   }
   renderer.render(scene, camera);
 }
-let worldTime = 0.38;
+worldTime = 0.38;
 animate();
 
 const modal = document.getElementById('modal');
@@ -541,8 +545,7 @@ document.getElementById('save-load').addEventListener('click', function(){ openS
 // call mobAI
 const __loopHook = animate;
 animate = function(){ requestAnimationFrame(animate); if(!gamePaused){ const d=clock.getDelta(); playerUpdate(d); worldTime=(worldTime+d*0.03)%1; /* sun updated in main animate already */ mobAI(d); if(player.hp<=0){ player.hp=0; toast('Game over'); } } renderer.render(scene,camera); };
-let worldName='Default';
-worldName = worldName;
+worldName = 'Default';
 document.getElementById('worldName').textContent='Default';
 
 window.saveModal=openSaveModal; window.worldName=worldName; window.selected=selected;
